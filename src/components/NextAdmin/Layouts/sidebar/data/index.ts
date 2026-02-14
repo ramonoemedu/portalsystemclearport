@@ -11,11 +11,13 @@ export interface NavItem {
   url?: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   items: NavSubItem[];
+  restricted?: boolean; // New property to mark items for specific users
 }
 
 export interface NavSection {
   label: string;
   items: NavItem[];
+  restricted?: boolean;
 }
 
 export const NAV_DATA: NavSection[] = [
@@ -32,6 +34,30 @@ export const NAV_DATA: NavSection[] = [
         title: "Clear Port",
         url: "/clearport",
         icon: Icons.Alphabet,
+        items: [],
+      },
+      {
+        title: "Reports",
+        url: "/reports",
+        icon: Icons.Table,
+        items: [],
+      },
+    ],
+  },
+  {
+    label: "Restricted Tools",
+    restricted: true, // Mark whole section as restricted
+    items: [
+      {
+        title: "CV Converter",
+        url: "/cv-converter",
+        icon: Icons.Alphabet,
+        items: [],
+      },
+      {
+        title: "PDF Converter",
+        url: "/pdf-converter",
+        icon: Icons.Calendar,
         items: [],
       },
     ],

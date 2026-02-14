@@ -4,43 +4,60 @@ import { Logo } from "@/components/NextAdmin/logo";
 import { cn } from "@/lib/NextAdmin/utils";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { NAV_DATA } from "./data";
 import { ArrowLeftIcon, ChevronUp } from "./icons";
 import { MenuItem } from "./menu-item";
 import { useSidebarContext } from "./sidebar-context";
+import { useAuthContext } from "@/components/AuthProvider";
 
 export function Sidebar() {
   const pathname = usePathname();
   const { setIsOpen, isOpen, isMobile, toggleSidebar } = useSidebarContext();
+  const { user } = useAuthContext();
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
+
+  // Check if user is ramonoem
+  const isAuthorized = useMemo(() => {
+    if (!user) return false;
+    const email = user.email || "";
+    // Check for both the internal email and potentially google email if it contains ramonoem
+    return email.toLowerCase().startsWith("ramonoem@") || email.toLowerCase() === "ramonoemedu@gmail.com";
+  }, [user]);
+
+  // Filter navigation based on authorization
+  const filteredNavData = useMemo(() => {
+    return NAV_DATA.filter(section => {
+      if (section.restricted && !isAuthorized) return false;
+      return true;
+    }).map(section => ({
+      ...section,
+      items: section.items.filter(item => {
+        if (item.restricted && !isAuthorized) return false;
+        return true;
+      })
+    }));
+  }, [isAuthorized]);
 
   const toggleExpanded = (title: string) => {
     setExpandedItems((prev) => (prev.includes(title) ? [] : [title]));
-
-    // Uncomment the following line to enable multiple expanded items
-    // setExpandedItems((prev) =>
-    //   prev.includes(title) ? prev.filter((t) => t !== title) : [...prev, title],
-    // );
   };
 
   useEffect(() => {
     // Keep collapsible open, when it's subpage is active
-    NAV_DATA.some((section) => {
+    filteredNavData.some((section) => {
       return section.items.some((item) => {
         return item.items.some((subItem) => {
           if (subItem.url === pathname) {
             if (!expandedItems.includes(item.title)) {
               toggleExpanded(item.title);
             }
-
-            // Break the loop
             return true;
           }
         });
       });
     });
-  }, [pathname]);
+  }, [pathname, filteredNavData]);
 
   return (
     <>
@@ -87,7 +104,7 @@ export function Sidebar() {
 
           {/* Navigation */}
           <div className="custom-scrollbar mt-6 flex-1 overflow-y-auto pr-3 min-[850px]:mt-10">
-            {NAV_DATA.map((section) => (
+            {filteredNavData.map((section) => (
               <div key={section.label} className="mb-6">
                 <h2 className="mb-5 text-sm font-medium text-dark-4 dark:text-dark-6">
                   {section.label}

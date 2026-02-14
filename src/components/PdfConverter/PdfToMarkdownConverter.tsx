@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Paper,
@@ -27,6 +27,8 @@ import { ProfileData } from '@/types';
 import Tesseract from 'tesseract.js';
 import * as pdfjsLib from 'pdfjs-dist';
 import { saveAs } from 'file-saver';
+import { useAuthContext } from '@/components/AuthProvider';
+import { useRouter } from 'next/navigation';
 
 // Set up the worker for pdf.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -39,11 +41,24 @@ interface ConversionResult {
 }
 
 const PdfToMarkdownConverter: React.FC = () => {
+  const { user } = useAuthContext();
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<ConversionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Access Control: Only ramonoem can access this component
+  useEffect(() => {
+    if (user) {
+      const email = user.email || "";
+      const isAuthorized = email.toLowerCase().startsWith("ramonoem@") || email.toLowerCase() === "ramonoemedu@gmail.com";
+      if (!isAuthorized) {
+        router.push('/');
+      }
+    }
+  }, [user, router]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];

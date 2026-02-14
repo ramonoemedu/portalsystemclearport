@@ -1,19 +1,34 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Button, Typography, Stack, Paper, Divider, Alert, LinearProgress, List, ListItem, ListItemText } from '@mui/material';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle } from 'docx';
 import { createWorker } from 'tesseract.js';
 import { saveAs } from 'file-saver';
+import { useAuthContext } from '@/components/AuthProvider';
+import { useRouter } from 'next/navigation';
 
 type ConvertedFile = { name: string; url: string; blob: Blob };
 
 export default function CvConverterPage() {
+  const { user } = useAuthContext();
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [status, setStatus] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [converted, setConverted] = useState<ConvertedFile[]>([]);
+
+  // Access Control: Only ramonoem can access this page
+  useEffect(() => {
+    if (user) {
+      const email = user.email || "";
+      const isAuthorized = email.toLowerCase().startsWith("ramonoem@") || email.toLowerCase() === "ramonoemedu@gmail.com";
+      if (!isAuthorized) {
+        router.push('/');
+      }
+    }
+  }, [user, router]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
