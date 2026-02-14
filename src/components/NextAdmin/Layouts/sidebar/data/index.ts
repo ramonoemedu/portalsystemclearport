@@ -36,12 +36,12 @@ export const NAV_DATA: NavSection[] = [
         icon: Icons.Alphabet,
         items: [],
       },
-      {
-        title: "Reports",
-        url: "/reports",
-        icon: Icons.Table,
-        items: [],
-      },
+      // {
+      //   title: "Reports",
+      //   url: "/reports",
+      //   icon: Icons.Table,
+      //   items: [],
+      // },
     ],
   },
   {
@@ -58,6 +58,12 @@ export const NAV_DATA: NavSection[] = [
         title: "PDF Converter",
         url: "/pdf-converter",
         icon: Icons.Calendar,
+        items: [],
+      },
+      {
+        title: "Name Extractor",
+        url: "/name-extractor",
+        icon: Icons.Alphabet,
         items: [],
       },
     ],

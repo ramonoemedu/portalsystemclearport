@@ -67,6 +67,10 @@ export default function EmployeeDataFormRoute() {
   };
 
   useEffect(() => {
+    setPage(1);
+  }, [searchText, blDate, coDate, rcvDate]);
+
+  useEffect(() => {
     fetchRows(page, { searchText, blDate, coDate, rcvDate });
   }, [page, fetchRows, searchText, blDate, coDate, rcvDate]);
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { db } from "@/lib/firebase";
 import {
   collection,
@@ -11,128 +11,124 @@ import {
   query,
   orderBy,
   limit,
-  writeBatch,
-  startAfter,
-  QueryDocumentSnapshot,
-  DocumentData,
-  where,
 } from "firebase/firestore";
 import { PAGE_SIZE, sanitizeKey, unsanitizeKey, columns } from "@/utils/KeySanitizer";
 import { createExcelBlobFromRows, uploadBlobToGoogleDrive } from "@/components/Report/ReportFuntion";
 
 export function useEmployeeData() {
-  const [rows, setRows] = useState<Record<string, string | number>[]>([]);
+  const [allRows, setAllRows] = useState<Record<string, any>[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [totalRows, setTotalRows] = useState(0);
-  const [cursors, setCursors] = useState<(QueryDocumentSnapshot<DocumentData> | null)[]>([null]);
+  const [filters, setFilters] = useState({
+    searchText: "",
+    blDate: null as string | null,
+    coDate: null as string | null,
+    rcvDate: null as string | null,
+  });
+
+  const fetchAllData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const q = query(
+        collection(db, "employeeData"),
+        orderBy(sanitizeKey("Job"), "desc")
+      );
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map((doc) => {
+        const raw = doc.data();
+        const mapped: { id: string; [key: string]: any } = { id: doc.id };
+        for (const key of Object.keys(raw)) {
+          mapped[unsanitizeKey(key)] = raw[key];
+        }
+        return mapped;
+      });
+      setAllRows(data);
+    } catch (err) {
+      console.error("Error fetching all employee data:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Filter logic
+  const filteredRows = useMemo(() => {
+    return allRows.filter((row) => {
+      // 1. Search Text Filter (Search across multiple common fields)
+      if (filters.searchText) {
+        const search = filters.searchText.toLowerCase();
+        const searchFields = ["Job", "B/L No", "Importer", "Client Name", "Inv", "Container No"];
+        const matchesSearch = searchFields.some((field) => {
+          const val = row[field];
+          return val && val.toString().toLowerCase().includes(search);
+        });
+        if (!matchesSearch) return false;
+      }
+
+      // 2. B/L Date Filter
+      if (filters.blDate && row["B/L Date"] !== filters.blDate) {
+        return false;
+      }
+
+      // 3. CO Date Filter
+      if (filters.coDate && row["CO Date"] !== filters.coDate) {
+        return false;
+      }
+
+      // 4. Rcv Date Filter (The filter on UI says Rcv Date, check matching field)
+      if (filters.rcvDate && row["Rcv Date"] !== filters.rcvDate) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [allRows, filters]);
+
+  const [page, setPage] = useState(1);
+
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredRows.slice(start, start + PAGE_SIZE);
+  }, [filteredRows, page]);
+
+  const fetchRows = useCallback(
+    async (pageNumber: number, newFilters?: typeof filters) => {
+      if (newFilters) {
+        setFilters(newFilters);
+      }
+      setPage(pageNumber);
+    },
+    []
+  );
+
   const [dropdownOptions, setDropdownOptions] = useState<Record<string, string[]>>({
     "Imp/Exp": [],
     "Ship'm Mode": [],
     "Vssl/Truck": [],
   });
 
-  const fetchTotalCount = useCallback(async () => {
-    try {
-      const snapshot = await getDocs(collection(db, "employeeData"));
-      setTotalRows(snapshot.size);
-    } catch (err) {
-      console.error("Error fetching total count:", err);
-    }
-  }, []);
-
-  const fetchRows = useCallback(
-    async (
-      pageNumber: number,
-      filters?: {
-        searchText?: string;
-        blDate?: string | null;
-        coDate?: string | null;
-        rcvDate?: string | null;
-      }
-    ) => {
-      setLoading(true);
-      try {
-        let q = query(
-          collection(db, "employeeData"),
-          orderBy(sanitizeKey("Job"), "desc"),
-          limit(PAGE_SIZE)
-        );
-
-        // Simple search implementation (client-side search is often better for Firestore unless using Algolia)
-        // But for now, we'll keep the base query and potentially add basic filters if needed.
-        // Real search in Firestore is limited.
-
-        const cursor = cursors[pageNumber - 1];
-        if (cursor && pageNumber > 1) {
-          q = query(
-            collection(db, "employeeData"),
-            orderBy(sanitizeKey("Job"), "desc"),
-            startAfter(cursor),
-            limit(PAGE_SIZE)
-          );
-        }
-
-        const snapshot = await getDocs(q);
-
-        const data = snapshot.docs.map((doc) => {
-          const raw = doc.data();
-          const mapped: { id: string; [key: string]: any } = { id: doc.id };
-          for (const key of Object.keys(raw)) {
-            mapped[unsanitizeKey(key)] = raw[key];
-          }
-          return mapped;
-        });
-
-        setRows(data);
-
-        if (!cursors[pageNumber]) {
-          setCursors((prev) => {
-            const updated = [...prev];
-            updated[pageNumber] = snapshot.docs[snapshot.docs.length - 1] ?? null;
-            return updated;
-          });
-        }
-      } catch (err) {
-        console.error("Error fetching employee data:", err);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [cursors]
-  );
-
   const fetchDropdownOptions = useCallback(async () => {
     try {
       const fields = ["Imp/Exp", "Ship'm Mode", "Vssl/Truck"];
-      // In a real app, you'd probably have a separate collection for these or aggregate them periodically.
-      // For now, we'll stick to the current logic but maybe optimize.
-      const snapshot = await getDocs(collection(db, "employeeData"));
-
       const uniqueValues: Record<string, Set<string>> = {};
       fields.forEach((field) => (uniqueValues[field] = new Set<string>()));
 
-      snapshot.docs.forEach((doc) => {
-        const data = doc.data();
+      allRows.forEach((row) => {
         fields.forEach((field) => {
-          const sanitizedField = sanitizeKey(field);
-          if (data[sanitizedField] && typeof data[sanitizedField] === "string") {
-            uniqueValues[field].add(data[sanitizedField] as string);
+          if (row[field] && typeof row[field] === "string") {
+            uniqueValues[field].add(row[field] as string);
           }
         });
       });
 
       const options: Record<string, string[]> = {};
-      fields.forEach((field) => (options[field] = Array.from(uniqueValues[field]).sort()));
-
       const defaults = {
         "Imp/Exp": ["IMPORT", "EXPORT", "DOMESTIC", "OTHERS", "TRANSIT", "WAREHOUSE", "RE-EXPORT"],
         "Ship'm Mode": ["SEA", "AIR", "LAND", "LAND-LCL", "SEA-LCL", "MULTI-MODAL"],
         "Vssl/Truck": ["VSSL", "TRUCK", ""],
       };
 
-      Object.entries(defaults).forEach(([field, defaultValues]) => {
-        const combined = new Set([...defaultValues, ...(options[field] || [])]);
+      fields.forEach((field) => {
+        const combined = new Set([...(defaults[field as keyof typeof defaults] || []), ...Array.from(uniqueValues[field])]);
         options[field] = Array.from(combined).sort();
       });
 
@@ -140,7 +136,7 @@ export function useEmployeeData() {
     } catch (error) {
       console.error("Error fetching dropdown options:", error);
     }
-  }, []);
+  }, [allRows]);
 
   const saveEntry = async (id: string | null, data: Record<string, any>) => {
     setSaving(true);
@@ -155,7 +151,6 @@ export function useEmployeeData() {
       try {
         const mappedRow: any = { id: id || "new" };
         columns.forEach(col => {
-          // data contains the sanitized keys from the form
           mappedRow[col] = data[sanitizeKey(col)] ?? "";
         });
         
@@ -165,12 +160,11 @@ export function useEmployeeData() {
           "1.Clearance Follow Up SAMPLE.xlsx",
           "756046169704-piuq4qipnshpv1bqe2jt4327pisccbvv.apps.googleusercontent.com"
         );
-        console.log("Single record synced to Google Drive");
       } catch (driveErr) {
         console.error("Auto-sync to Google Drive failed:", driveErr);
       }
 
-      await fetchTotalCount();
+      await fetchAllData();
       return true;
     } catch (err) {
       console.error("Error saving entry:", err);
@@ -181,18 +175,28 @@ export function useEmployeeData() {
   };
 
   useEffect(() => {
-    fetchTotalCount();
-    fetchDropdownOptions();
-  }, [fetchTotalCount, fetchDropdownOptions]);
+    fetchAllData();
+  }, [fetchAllData]);
+
+  useEffect(() => {
+    if (allRows.length > 0) {
+      fetchDropdownOptions();
+    }
+  }, [allRows, fetchDropdownOptions]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [filters]);
 
   return {
-    rows,
+    rows: paginatedRows,
     loading,
     saving,
-    totalRows,
+    totalRows: filteredRows.length,
     fetchRows,
     dropdownOptions,
     saveEntry,
-    refreshCount: fetchTotalCount,
+    refreshCount: fetchAllData,
   };
 }

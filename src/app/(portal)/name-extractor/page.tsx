@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -22,6 +22,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import ImageIcon from '@mui/icons-material/Image';
 import Tesseract from 'tesseract.js';
 import ExcelJS from 'exceljs';
+import { useAuthContext } from '@/components/AuthProvider';
+import { useRouter } from 'next/navigation';
 
 interface ExtractedName {
   name: string;
@@ -29,11 +31,24 @@ interface ExtractedName {
 }
 
 export default function NameExtractorPage() {
+  const { user } = useAuthContext();
+  const router = useRouter();
   const [images, setImages] = useState<File[]>([]);
   const [extractedNames, setExtractedNames] = useState<ExtractedName[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  // Access Control
+  useEffect(() => {
+    if (user) {
+      const email = user.email || "";
+      const isAuthorized = email.toLowerCase().startsWith("ramonoem@") || email.toLowerCase() === "ramonoemedu@gmail.com";
+      if (!isAuthorized) {
+        router.push('/');
+      }
+    }
+  }, [user, router]);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
