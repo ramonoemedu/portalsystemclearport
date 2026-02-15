@@ -127,8 +127,7 @@ export default function CvConverterPage() {
       const result = await worker.recognize(file);
       const { text } = result.data;
       
-      const rawLines = (result.data.lines || text.split('\n'))
-        .map((l: any) => (typeof l === 'string' ? l : l.text))
+      const rawLines = text.split('\n')
         .filter((t: string) => t.trim().length > 0);
 
       await worker.terminate();
