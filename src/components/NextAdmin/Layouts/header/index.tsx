@@ -66,7 +66,7 @@ export function Header() {
 
         <ThemeToggleSwitch />
 
-        <Notification />
+        {/* <Notification /> */}
 
         <div className="shrink-0">
           <UserInfo />
